@@ -1,0 +1,9 @@
+---
+title: "Severe Weather Events"
+output: html_document
+---
+
+```{r cache=TRUE}
+stormdata <- read.csv('./repdata-data-StormData.csv.bz2')
+str(stormdata)
+```

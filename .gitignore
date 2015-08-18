@@ -1,0 +1,6 @@
+*.html
+*.csv
+*.bz2
+*cache
+.RData
+.Rhistory
