@@ -1,0 +1,28 @@
+Notes:
+
+library('dplyr')
+ei <- select(stormdata,EVTYPE,FATALITIES, INJURIES, PROPDMG, CROPDMG)
+by_evtype <- group_by(ei, EVTYPE)
+fatalities <- summarise(by_evtype, count = n())
+
+After grabbing the columns I wanted, grouping by event type, and counting fatalities,
+I noticed several duplicate ways of naming the same things. One way this happended was with
+differences in string case.
+
+5  coastal flooding	2
+56	Coastal Flooding	38
+57	COASTAL FLOODING	143
+
+The first grouping had 985 observations.
+
+Normalizing case:
+
+ei$EVTYPE <- toupper(ei$EVTYPE)
+by_evtype <- group_by(ei, EVTYPE)
+fatalities <- summarise(by_evtype, count = n())
+
+Brings it down to 898. There's still a lot of overlap where the same item may have
+been recorded using a slightly different event type, for example:
+
+fatalities[28:36,]
+
