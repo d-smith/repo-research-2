@@ -70,5 +70,7 @@ officialCats$EventName <- toUpper(officialCats$EventName)
 
 officialof <- inner_join(of, officialCats, c('EVTYPE' = 'EventName'))
 
-Winnowing down the initial data set:
+library('lubridate')
+hd <- filter(stormdata,EVTYPE == "HAIL")
+dates <- mdy_hms(as.character(hd$BGN_DATE))
 
