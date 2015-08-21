@@ -74,3 +74,14 @@ library('lubridate')
 hd <- filter(stormdata,EVTYPE == "HAIL")
 dates <- mdy_hms(as.character(hd$BGN_DATE))
 
+hd$year <- year(mdy_hms(as.character(hd$BGN_DATE)))
+hail_by_year <- group_by(hd,year)
+hail_year_summary <- summarize(hail_by_year, count=n())
+library('ggplot2')
+ggplot(hail_year_summary, aes(count,year))+geom_smooth()
+
+
+sd_by_evtype <- group(stormdata, EVTYPE)
+sd_by_evtype <- group_by(stormdata, EVTYPE)
+sum_by_evtype <- summarize(sd_by_evtype, count=sum(FATALITIES))
+of <- arrange(sub_by_evtype,desc(count))
