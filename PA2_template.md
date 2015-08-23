@@ -21,26 +21,39 @@ draw any trend-based conclusions from the current data.
 The data set, available [here](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2), is from the National Weather Service. The following code assumes the data set has been downloaded and has the same file name as the source. This analysis uses a data set downloaded
 from the aforementioned URL on August 18, 2015.
 
-```{r cache=TRUE}
+
+```r
 stormdata <- read.csv('./repdata-data-StormData.csv.bz2')
 ```
 
 According to the [data set documentation](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf), there are 48 permitted weather events. Examining the data set, we see there
 are many more events in the data set than the 48 permitted events.
 
-```{r cache=TRUE}
+
+```r
 summary(levels(stormdata$EVTYPE))
+```
+
+```
+##    Length     Class      Mode 
+##       985 character character
 ```
 
 Some of the overlap may be due to differences in case, for example:
 
-```{r cache=TRUE}
+
+```r
 levels(stormdata$EVTYPE)[42:44]
+```
+
+```
+## [1] "blowing snow" "Blowing Snow" "BLOWING SNOW"
 ```
 
 We can try normalizing the values on case:
 
-```{r cache=TRUE}
+
+```r
 stormdata$EVTYPE <- toupper(stormdata$EVTYPE)
 ```
 
@@ -48,8 +61,13 @@ This changes EVTYPE from a factor to character
 
 We see that there are still more values than the permitted 48:
 
-```{r cache=TRUE}
+
+```r
 length(unique(stormdata$EVTYPE))
+```
+
+```
+## [1] 898
 ```
 
 A lot of it is just a mess - cleaning this up is well beyond the scope of this assignment.
@@ -61,7 +79,8 @@ Note that the R list representation of the weather events was [posted by Deas Ri
 the Coursera discussion](https://class.coursera.org/repdata-031/forum/thread?thread_id=50#post-259) related to this analysis. I verified the list of events in the 
 officialCats definition against the source documentation.
 
-```{r cache=TRUE}
+
+```r
 library('dplyr')
 sd <- select(stormdata,BGN_DATE, EVTYPE,FATALITIES, INJURIES, PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP)
 
@@ -110,13 +129,18 @@ psd <- inner_join(sd,officialCats,c('EVTYPE' = 'EventName'))
 length(unique(psd$EVTYPE))
 ```
 
+```
+## [1] 46
+```
+
 Now we have 46 unique levels.
 
 Next, we need to combine the damage and damage exponent columns to calculate the total damage. First step is to map exp levels (PROPDMGEXP, CROPDMGEXP) to a number. Note for values that don't make sense (+,-,etc.) we use 1 as the value.
 
 The multiplier function will be used to do the mapping.
 
-```{r}
+
+```r
 multiplier <- function(exp) {
   # default to 1 for things that don't make sense, e.g. -,?,+, etc
   m <- 1
@@ -153,13 +177,15 @@ multiplier <- function(exp) {
 
 Now we can add some multiplier columns:
 
-```{r cache=TRUE}
+
+```r
 psd$PDMULT <- sapply(psd$PROPDMGEXP, multiplier)
 psd$CDMULT <- sapply(psd$CROPDMGEXP, multiplier)
 ```
 
 Now we calculate damage totals.
-```{r cache=TRUE}
+
+```r
 psd$PDTOTAL <- psd$PDMULT * psd$PROPDMG
 psd$CDTOTAL <- psd$CDMULT * psd$CROPDMG
 ```
@@ -173,11 +199,33 @@ First, we determine the weather events that are most harmful to population healt
 United States. For this analysis, I define 'most harmful' as those events with the 
 highest total of fatalities and injuries combined. 
 
-```{r cache=TRUE}
+
+```r
 by_evtype <- group_by(psd, EVTYPE)
 hd <- summarise(by_evtype, HUMANDMG = sum(FATALITIES) + sum(INJURIES))
 hd <- arrange(hd, desc(HUMANDMG))
 head(hd, n = 15)
+```
+
+```
+## Source: local data frame [15 x 2]
+## 
+##               EVTYPE HUMANDMG
+## 1            TORNADO    96979
+## 2     EXCESSIVE HEAT     8428
+## 3              FLOOD     7259
+## 4          LIGHTNING     6046
+## 5               HEAT     3037
+## 6        FLASH FLOOD     2755
+## 7          ICE STORM     2064
+## 8  THUNDERSTORM WIND     1621
+## 9       WINTER STORM     1527
+## 10         HIGH WIND     1385
+## 11              HAIL     1376
+## 12        HEAVY SNOW     1148
+## 13          WILDFIRE      986
+## 14          BLIZZARD      906
+## 15       RIP CURRENT      600
 ```
 
 As expected, severe weather events like tornados, floods, and lightning dominate the
@@ -194,10 +242,32 @@ economic consequences. We can break this down by property damage and crop damage
 
 #### Property Damage
 
-```{r cache=TRUE}
+
+```r
 pd <- summarise(by_evtype, TOTALPROPDMG = sum(PDTOTAL))
 pd <- arrange(pd, desc(TOTALPROPDMG))
 head(pd, n = 15)
+```
+
+```
+## Source: local data frame [15 x 2]
+## 
+##               EVTYPE TOTALPROPDMG
+## 1              FLOOD 144657709807
+## 2            TORNADO  56937161054
+## 3        FLASH FLOOD  16140812294
+## 4               HAIL  15732267427
+## 5     TROPICAL STORM   7703890550
+## 6       WINTER STORM   6688497250
+## 7          HIGH WIND   5270046295
+## 8           WILDFIRE   4765114000
+## 9   STORM SURGE/TIDE   4641188000
+## 10         ICE STORM   3944927810
+## 11 THUNDERSTORM WIND   3483121166
+## 12           DROUGHT   1046106000
+## 13        HEAVY SNOW    932589148
+## 14         LIGHTNING    928659369
+## 15        HEAVY RAIN    694248090
 ```
 
 Again, the most extreme weather events dominate those that cause the most econmic damage. 
@@ -207,19 +277,62 @@ for crop data (see below)
 
 #### Crop Damage
 
-```{r cache=TRUE}
+
+```r
 cd <- summarise(by_evtype, TOTALCROPDMG = sum(CDTOTAL))
 cd <- arrange(cd, desc(TOTALCROPDMG))
 head(cd, n = 15)
+```
+
+```
+## Source: local data frame [15 x 2]
+## 
+##               EVTYPE TOTALCROPDMG
+## 1            DROUGHT  13972566000
+## 2              FLOOD   5661968450
+## 3          ICE STORM   5022113500
+## 4               HAIL   3025537870
+## 5        FLASH FLOOD   1421317100
+## 6       FROST/FREEZE   1094186000
+## 7         HEAVY RAIN    733399800
+## 8     TROPICAL STORM    678346000
+## 9          HIGH WIND    638571300
+## 10    EXCESSIVE HEAT    492402000
+## 11           TORNADO    414953110
+## 12 THUNDERSTORM WIND    414843050
+## 13              HEAT    401461500
+## 14          WILDFIRE    295472800
+## 15        HEAVY SNOW    134653100
 ```
 
 #### Trends
 
 It's interesting to look at the data broken down by year to see if we can observe any trends.
 
-```{r}
+
+```r
 library('lubridate')
 library('dplyr')
+```
+
+```
+## 
+## Attaching package: 'dplyr'
+## 
+## The following objects are masked from 'package:lubridate':
+## 
+##     intersect, setdiff, union
+## 
+## The following object is masked from 'package:stats':
+## 
+##     filter
+## 
+## The following objects are masked from 'package:base':
+## 
+##     intersect, setdiff, setequal, union
+```
+
+```r
 library('ggplot2')
 psd$year <- year(mdy_hms(as.character(psd$BGN_DATE)))
 psd_by_year <- group_by(psd,year)
@@ -229,9 +342,33 @@ pdamage = sum(PDTOTAL), cdamage=sum(CDTOTAL))
 
 
 ggplot(f, aes(year,hdamage)) + geom_smooth() + xlab("Year") + ylab("Human Damage") + ggtitle("Weather-Caused Human Damage vs Year")
+```
+
+```
+## geom_smooth: method="auto" and size of largest group is <1000, so using loess. Use 'method = x' to change the smoothing method.
+```
+
+![plot of chunk unnamed-chunk-13](figure/unnamed-chunk-13-1.png) 
+
+```r
 ggplot(f, aes(year,pdamage)) + geom_smooth() + xlab("Year") + ylab("Property Damage") + ggtitle("Weather-Caused Property Damage vs Year")
+```
+
+```
+## geom_smooth: method="auto" and size of largest group is <1000, so using loess. Use 'method = x' to change the smoothing method.
+```
+
+![plot of chunk unnamed-chunk-13](figure/unnamed-chunk-13-2.png) 
+
+```r
 ggplot(f, aes(year,cdamage)) + geom_smooth() + xlab("Year") + ylab("Property Damage") + ggtitle("Weather-Caused Crop Damage vs Year")
 ```
+
+```
+## geom_smooth: method="auto" and size of largest group is <1000, so using loess. Use 'method = x' to change the smoothing method.
+```
+
+![plot of chunk unnamed-chunk-13](figure/unnamed-chunk-13-3.png) 
 
 While in general we see human and economic damage trending up over time, without 
 accompanying population data and without adjusting dollar amounts for inflation, we
