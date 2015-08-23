@@ -1,36 +1,29 @@
-Notes:
+stormdata <- read.csv('./repdata-data-StormData.csv.bz2')
 
-Dataset: https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2
-Codebook: https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf
-FAQ: https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2FNCDC%20Storm%20Events-FAQ%20Page.pdf
 
-library('dplyr')
-ei <- select(stormdata,EVTYPE,FATALITIES, INJURIES, PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP)
-by_evtype <- group_by(ei, EVTYPE)
-fatalities <- summarise(by_evtype, count = n())
+First we see there evtype levels have a lot more values than the permitted 48 values 
+noted in the documentation: https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf
 
-After grabbing the columns I wanted, grouping by event type, and counting fatalities,
-I noticed several duplicate ways of naming the same things. One way this happended was with
-differences in string case.
+summary(levels(stormdata$EVTYPE))
 
-5  coastal flooding	2
-56	Coastal Flooding	38
-57	COASTAL FLOODING	143
 
-The first grouping had 985 observations.
+Some of the overlap may be due to differences in case. We can try normalizing the values on case:
 
-Normalizing case:
+stormdata$EVTYPE <- toupper(stormdata$EVTYPE)
 
-ei$EVTYPE <- toupper(ei$EVTYPE)
-by_evtype <- group_by(ei, EVTYPE)
-fatalities <- summarise(by_evtype, count = n())
+This changes EVTYPE from a factor to character
 
-Brings it down to 898. There's still a lot of overlap where the same item may have
-been recorded using a slightly different event type, for example:
+We see that there are still more values than the permitted 48:
 
-fatalities[28:36,]
+length(unique(stormdata$EVTYPE))
 
-Catagories from the code book:
+A lot of it is just a mess - cleaning this up is well beyond the scope of this assignment.
+
+One simple way to proceed is to just drop everything that is not a permitted event type. We can do this by joining
+the storm data against the permitted events. First, we'll extract the columns we need for the rest of the analysis.
+
+library('dplr')
+sd <- select(stormdata,BGN_DATE, EVTYPE,FATALITIES, INJURIES, PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP)
 
 officialCats <- structure(
   list(
@@ -68,20 +61,96 @@ officialCats <- structure(
 
 officialCats$EventName <- toUpper(officialCats$EventName)
 
-officialof <- inner_join(of, officialCats, c('EVTYPE' = 'EventName'))
+officialStormData <- inner_join(stormData, officialCats, c('EVTYPE' = 'EventName'))
 
-library('lubridate')
-hd <- filter(stormdata,EVTYPE == "HAIL")
-dates <- mdy_hms(as.character(hd$BGN_DATE))
+psd <- inner_join(sd,officialCats,c('EVTYPE' = 'EventName'))
 
-hd$year <- year(mdy_hms(as.character(hd$BGN_DATE)))
-hail_by_year <- group_by(hd,year)
-hail_year_summary <- summarize(hail_by_year, count=n())
+Now we have 46 unique levels.
+
+length(unique(psd$EVTYPE))
+
+Next, we need to combine the damage and damage exponent columns to calculate the total damage. First step is to map
+exp levels to a number:
+
+multiplier <- function(exp) {
+  # default to 1 for things that don't make sense, e.g. -,?,+, etc
+  m <- 1
+  if(exp == "0") {
+    m <- 0
+  } else if (exp == "2") {
+    m <- 2
+  } else if (exp == "3") {
+    m <- 3
+  } else if (exp == "4") {
+    m <- 4
+  } else if (exp == "5") {
+    m <- 5
+  } else if (exp == "6") {
+    m <- 6
+  } else if (exp == "7") {
+    m <- 7
+  } else if (exp == "8") {
+    m <- 8
+  } else if (exp == "B") {
+    m <- 1000000000
+  } else if(exp == "h" || exp == "H") {
+    m <- 100
+  } else if(exp == "K") {
+    m <- 1000 
+  } else if(exp == "m" || exp == "M") {
+    m <- 1000000
+  }
+  
+  m
+  
+}
+
+Now we can add some multiplier columns:
+
+
+psd$PDMULT <- sapply(psd$PROPDMGEXP, multiplier)
+psd$CDMULT <- sapply(psd$CROPDMGEXP, multiplier)
+
+Now we calculate damage totals.
+psd$PDTOTAL <- psd$PDMULT * psd$PROPDMG
+psd$CDTOTAL <- psd$CDMULT * psd$CROPDMG
+
+
+
+by_evtype <- group_by(psd, EVTYPE)
+
+hd <- summarise(by_evtype, HUMANDMG = sum(FATALITIES) + sum(INJURIES))
+hd <- arrange(hd, desc(HUMANDMG))
+
+
+
+td <- filter(psd,EVTYPE=="TORNADO")
+td$year <- year(mdy_hms(as.character(td$BGN_DATE)))
+td_by_year <- group_by(td,year)
+td_year_summary <- summarize(td_by_year, count=sum(FATALITIES) + sum(INJURIES))
 library('ggplot2')
-ggplot(hail_year_summary, aes(count,year))+geom_smooth()
+ggplot(td_year_summary,aes(year,count)) + geom_smooth()
+
+psd$year <- year(mdy_hms(as.character(psd$BGN_DATE)))
+psd_by_year <- group_by(psd,year)
+psd_year_summary <- summarize(psd_by_year, count=sum(FATALITIES) + sum(INJURIES))
+library('ggplot2')
+ggplot(psd_year_summary,aes(year,count)) + geom_smooth()
+
+f <- summarize(psd_by_year, count=n(), hdamage=mean(FATALITIES) + mean(INJURIES),
+pdamage = mean(PDTOTAL))
+
+ggplot(f, aes(pdamage, hdamage)) +
+  geom_point(aes(size = count), alpha = 1/2) +
+  geom_smooth() +
+  scale_size_area()
+
+f <- summarize(psd_by_year,  hdamage=sum(FATALITIES) + sum(INJURIES),
+pdamage = sum(PDTOTAL), cdamage=sum(CDTOTAL))
 
 
-sd_by_evtype <- group(stormdata, EVTYPE)
-sd_by_evtype <- group_by(stormdata, EVTYPE)
-sum_by_evtype <- summarize(sd_by_evtype, count=sum(FATALITIES))
-of <- arrange(sub_by_evtype,desc(count))
+ggplot(f, aes(year,hdamage)) + geom_smooth()
+ggplot(f, aes(year,pdamage)) + geom_smooth()
+ggplot(f, aes(year,cdamage)) + geom_smooth()
+
+
